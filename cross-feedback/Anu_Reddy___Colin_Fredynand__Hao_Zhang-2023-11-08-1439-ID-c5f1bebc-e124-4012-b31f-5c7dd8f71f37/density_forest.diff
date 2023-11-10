@@ -1,0 +1,481 @@
+diff --git a/DensityForest.py b/DensityForest.py
+index e5c2a03..bac36ac 100644
+--- a/DensityForest.py
++++ b/DensityForest.py
+@@ -33,7 +33,7 @@ def generate_monte_carlo_sample(X, num_samples=1000000):
+     """max_depth=10,num_splits=10,min_infogain=1.5
+     Generate more sample points
+     """
+-    samples = np.random.rand(num_samples,len(x[0]))
++    samples = np.random.rand(num_samples,len(X[0]))
+     d_mins = np.min(X,axis=0)
+     d_maxs = np.max(X,axis=0)
+     samples = np.add(np.multiply(samples,d_maxs-d_mins),d_mins)
+@@ -42,7 +42,7 @@ def generate_monte_carlo_sample(X, num_samples=1000000):
+ 
+ def partition_function(tree, X, t_dict):
+     # generate a lot of samples in the bounds of the data and the size of the bounded shape
+-    samples, b_size = generate_monte_carlo_sample(x)
++    samples, b_size = generate_monte_carlo_sample(X)
+     # add gaussian probability dimension for those samples
+     g_probs_samples = np.random.random(len(samples))
+     # predict the target leaf nodes for all samples
+@@ -72,8 +72,8 @@ def get_bootstrap_indices(num_samples,max_length):
+ 
+ class DensityForest:
+ 
+-    def __init__(self, n_estimators, max_depth=10, num_splits=10, min_infogain=1.5, boostrap=True):
+-        self.forest = [RandomDensityTree(max_depth,num_splits,min_infogain) for i in range(n_estimators)]
++    def __init__(self, n_estimators, max_depth=10, num_splits=10, min_infogain=1.5, boostrap=True, splittype="axis"):
++        self.forest = [RandomDensityTree(max_depth,num_splits,min_infogain, splittype=splittype) for i in range(n_estimators)]
+         self.boostrap = boostrap
+ 
+     def fit(self, X):
+@@ -104,7 +104,7 @@ class DensityForest:
+             self.tree_dicts.append(t_dict)
+ 
+             self.p_funcs.append(partition_function(tree,X,t_dict))
+-            print(self.p_funcs[-1])
++            #print(self.p_funcs[-1]))
+ 
+     def predict(self, X):
+         leaf_preds = np.zeros((len(X), len(self.forest)))
+@@ -127,90 +127,93 @@ class DensityForest:
+         mean_p = np.mean(leaf_preds, axis=1)
+         return mean_p
+ 
+-
++    def sample(self, size=1):
++        trees = np.random.choice(len(self.forest), size=size)
++        return np.stack([self.forest[tree].sample() for tree in trees], axis=0)
+ 
+ 
+ # create tree
+-df = RandomDensityTree(max_depth=1,num_splits=10,min_infogain=1.5)
+-
+-# create dataset
+-mn = multivariate_normal(mean=[2,2], cov=[0.3,0.7])
+-dist1 = mn.rvs(100)
+-tar1 = multivariate_normal.pdf(dist1, np.mean(dist1,axis=0), np.cov(dist1.T))
+-mn = multivariate_normal(mean=[8,8], cov=[1,0.5])
+-dist2 = mn.rvs(100)
+-tar2 = multivariate_normal.pdf(dist2, np.mean(dist2,axis=0), np.cov(dist2.T))
+-x = np.concatenate((dist1,dist2),axis=0)
+-targets = np.concatenate((tar1,tar2),axis=0)
+-
+-# shuffle the data
+-shuffle_idc = np.arange(len(x))
+-np.random.shuffle(shuffle_idc)
+-x = x[shuffle_idc,:]
+-targets = targets[shuffle_idc]
+-
+-df.fit(x)
+-
+-clusters = np.array(df.predict(x))
+-unique_cl = np.unique(clusters)
+-data = []
+-colors = cm.rainbow(np.linspace(0, 1, len(unique_cl)))
+-groups = []
+-
+-for val in unique_cl:
+-    data.append(x[clusters==val,:])
+-    mean = np.mean(data[-1],axis=0)
+-    # print(mean)
+-    # print(df.tree[val].mean)
+-
+-    cov = np.cov(data[-1].T)
+-    preds = multivariate_normal.pdf(data[-1], mean=mean, cov=cov)
+-    tars = targets[clusters==val]
+-    # for p,t in zip(preds,tars):
+-    #     print(p,t)
+-
+-    groups.append(str(val))
+-
+-
+-d_forest = DensityForest(n_estimators=5,max_depth=10,num_splits=10,min_infogain=1.5,boostrap=False)
+-d_forest.fit(x)
+-preds = d_forest.predict(x)
+-# for p,t in zip(preds[:10],targets[:10]):
+-#     print(p,t)
+-
+-
+-x_axis = np.linspace(0,12,200)
+-y_axis = np.linspace(0,12,200)
+-X,Y = np.meshgrid(x_axis,y_axis)
+-grid_data = np.concatenate((X.reshape(40000,1),Y.reshape(40000,1)),axis=1)
+-
+-clusters = np.array(df.predict(grid_data))
+-unique_cl = np.unique(clusters)
+-p_vals = np.zeros(len(grid_data))
+-for val in unique_cl:
+-    leaf_data = grid_data[clusters==val,:]
+-    # mean = np.mean(leaf_data,axis=0)
+-    # print(mean)
+-    mean = df.tree[val].mean
+-    print(mean)
+-    # cov = np.cov(leaf_data.T)
+-    # print(cov)
+-    cov = df.tree[val].cov
+-    print(cov)
+-    preds = multivariate_normal.pdf(leaf_data, mean=mean, cov=cov)
+-    p_vals[clusters==val] = preds
+-
+-p_vals = d_forest.predict(grid_data)
+-plt.pcolormesh(X,Y,p_vals.reshape(np.shape(X)))
+-plt.show()
+-
+-# Create plot
+-fig = plt.figure()
+-ax = fig.add_subplot(1, 1, 1)
+-
+-for data, color, group in zip(data, colors, groups):
+-    ax.scatter(data[:,0], data[:,1], alpha=1.0, c=color, edgecolors='none', s=5, label=group)
+-
+-plt.title('Matplot scatter plot')
+-plt.legend(loc=2)
+-plt.show()
++# df = RandomDensityTree(max_depth=1,num_splits=10,min_infogain=1.5)
++#
++# # create dataset
++# mn = multivariate_normal(mean=[2,2], cov=[0.3,0.7])
++# dist1 = mn.rvs(100)
++# tar1 = multivariate_normal.pdf(dist1, np.mean(dist1,axis=0), np.cov(dist1.T))
++# mn = multivariate_normal(mean=[8,8], cov=[1,0.5])
++# dist2 = mn.rvs(100)
++# tar2 = multivariate_normal.pdf(dist2, np.mean(dist2,axis=0), np.cov(dist2.T))
++# x = np.concatenate((dist1,dist2),axis=0)
++# targets = np.concatenate((tar1,tar2),axis=0)
++#
++# # shuffle the data
++# shuffle_idc = np.arange(len(x))
++# np.random.shuffle(shuffle_idc)
++# x = x[shuffle_idc,:]
++# targets = targets[shuffle_idc]
++#
++# df.fit(x)
++#
++# clusters = np.array(df.predict(x))
++# unique_cl = np.unique(clusters)
++# data = []
++# colors = cm.rainbow(np.linspace(0, 1, len(unique_cl)))
++# groups = []
++#
++# for val in unique_cl:
++#     data.append(x[clusters==val,:])
++#     mean = np.mean(data[-1],axis=0)
++#     # print(mean)
++#     # print(df.tree[val].mean)
++#
++#     cov = np.cov(data[-1].T)
++#     preds = multivariate_normal.pdf(data[-1], mean=mean, cov=cov)
++#     tars = targets[clusters==val]
++#     # for p,t in zip(preds,tars):
++#     #     print(p,t)
++#
++#     groups.append(str(val))
++#
++#
++# d_forest = DensityForest(n_estimators=5,max_depth=10,num_splits=10,min_infogain=1.5,boostrap=False)
++# d_forest.fit(x)
++# preds = d_forest.predict(x)
++# # for p,t in zip(preds[:10],targets[:10]):
++# #     print(p,t)
++#
++#
++# x_axis = np.linspace(0,12,200)
++# y_axis = np.linspace(0,12,200)
++# X,Y = np.meshgrid(x_axis,y_axis)
++# grid_data = np.concatenate((X.reshape(40000,1),Y.reshape(40000,1)),axis=1)
++#
++# clusters = np.array(df.predict(grid_data))
++# unique_cl = np.unique(clusters)
++# p_vals = np.zeros(len(grid_data))
++# for val in unique_cl:
++#     leaf_data = grid_data[clusters==val,:]
++#     # mean = np.mean(leaf_data,axis=0)
++#     # print(mean)
++#     mean = df.tree[val].mean
++#     print(mean)
++#     # cov = np.cov(leaf_data.T)
++#     # print(cov)
++#     cov = df.tree[val].cov
++#     print(cov)
++#     preds = multivariate_normal.pdf(leaf_data, mean=mean, cov=cov)
++#     p_vals[clusters==val] = preds
++#
++# p_vals = d_forest.predict(grid_data)
++# plt.pcolormesh(X,Y,p_vals.reshape(np.shape(X)))
++# plt.show()
++#
++# # Create plot
++# fig = plt.figure()
++# ax = fig.add_subplot(1, 1, 1)
++#
++# for data, color, group in zip(data, colors, groups):
++#     ax.scatter(data[:,0], data[:,1], alpha=1.0, c=color, edgecolors='none', s=5, label=group)
++#
++# plt.title('Matplot scatter plot')
++# plt.legend(loc=2)
++# plt.show()
++#
+diff --git a/DensityTree.py b/DensityTree.py
+index e3a98b9..78ed990 100644
+--- a/DensityTree.py
++++ b/DensityTree.py
+@@ -13,42 +13,41 @@ import copy
+ 
+ #computes information-gain measure
+ def info_gain(data,cov,data_l,cov_l,data_r,cov_r):
+-     """Returns information gain
+-        Parameters
+-        ----------
+-        data :  data of root node
+-        cov : covariance of root node
+-        data_l: data of left child
+-        data_r: data of right child
+-        data_l: covariance of left child
+-        data_r: covariancr of right child
+-        Returns
+-        -------
+-        Information gain
+-        """
++    """Returns information gain
++       Parameters
++       ----------
++       data :  data of root node
++       cov : covariance of root node
++       data_l: data of left child
++       data_r: data of right child
++       data_l: covariance of left child
++       data_r: covariancr of right child
++       Returns
++       -------
++       Information gain
++       """
+ 
+     #entropy root-node
+-    a=np.linalg.det(cov)
+-    if(isnan(a)==True):
+-        a=0.000000000000000000001
+-    a=np.log(abs(a))
++    a=np.linalg.slogdet(cov)[1]
++    if(isnan(a)==True or a == -np.inf):
++        a=np.log(1e-9)
+     
+     #entropy left node
+-    b=np.linalg.det(cov_l)
+-    if np.isnan(b)==True:
+-        b=0.000000000000000000001
+-    b=(data_l.shape[0]/data.shape[0]) * np.log(abs(b))
++    b=np.linalg.slogdet(cov_l)[1]
++    if np.isnan(b)==True or b == -np.inf:
++        b=np.log(1e-9)
++    b=(data_l.shape[0]/data.shape[0]) * b
+     
+     #entropy right node
+-    c=np.linalg.det(cov_r)
+-    if np.isnan(c)==True:
+-        c=0.000000000000000000001
+-    c=(data_r.shape[0]/data.shape[0]) * np.log(abs(c))
+-    
++    c=np.linalg.slogdet(cov_r)[1]
++    if np.isnan(c)==True or c == -np.inf:
++        c=np.log(1e-9)
++    c=(data_r.shape[0]/data.shape[0]) * c
++    #print(a-b-c)
+     return a-b-c
+ 
+ #implementation of axis-aligned splitting
+-def split_data_axis(data,split,direction):
++def split_data_axis(data,bbox,split,direction):
+     """Returns information gain
+         Parameters
+         ----------
+@@ -60,35 +59,29 @@ def split_data_axis(data,split,direction):
+         -------
+         Data of the left child and data of the right child
+         """    
+-    left_data=np.array([[0,0]])
+-    right_data=np.array([[0,0]])
+-    for d in range(data.shape[0]):
+-        if data[d][direction]<=split:
+-            left_data=np.append(left_data,np.reshape(data[d],(1,data[d].shape[0])),axis=0)
+-        else:
+-            right_data=np.append(right_data,np.reshape(data[d],(1,data[d].shape[0])),axis=0)
+-            
+-    left_data=np.delete(left_data,0,axis=0)
+-    right_data=np.delete(right_data,0,axis=0)
+-    return(left_data,right_data)
++    idx = data[:, direction] <= split
++    left_data = data[idx]
++    right_data = data[~idx]
++    left_bbox, right_bbox = bbox.copy(), bbox.copy()
++    left_bbox[1, direction] = split
++    right_bbox[0, direction] = split
++
++    return left_data, right_data, left_bbox, right_bbox
+ 
+ #implementation of linear splitting
+-def split_data_lin(data,start,direction):
+-     """Similar to above function but with non-axis aligned linear splits
+-        """    
+-    left_data=np.array([[0,0]])
+-    right_data=np.array([[0,0]])
+-    i=0
+-    for d in range(data.shape[0]):
+-        if np.cross((start+direction)-start,data[d]-start)<0:
+-            left_data=np.append(left_data,np.reshape(data[d],(1,data[d].shape[0])),axis=0)
+-        else:
+-            right_data=np.append(right_data,np.reshape(data[d],(1,data[d].shape[0])),axis=0)
+-            
+-    # print(left_data)
+-    left_data=np.delete(left_data,0,axis=0)
+-    right_data=np.delete(right_data,0,axis=0)
+-    return(left_data,right_data)
++def split_data_lin(data,bbox,start,direction):
++    """Similar to above function but with non-axis aligned linear splits
++       """
++    left_data, right_data = [], []
++    idx = np.dot(data - start, direction) < 0
++    left_data = data[idx]
++    right_data = data[~idx]
++
++    # this is an approximation, exact bounding boxes are not possible for non-axis aligned splits
++    left_bbox = np.stack((left_data.min(0), left_data.max(0)), axis=0)
++    right_bbox = np.stack((right_data.min(0), right_data.max(0)), axis=0)
++
++    return left_data, right_data, left_bbox, right_bbox
+ 
+ 
+ class RandomDensityTree:
+@@ -108,11 +101,12 @@ class RandomDensityTree:
+         '''fits the tree to the training data'''
+         if(axis==1):
+             data=np.transpose(data)
++        bbox = np.stack((data.min(0), data.max(0)), axis=0)
+         self.size=data.shape[0]
+         self.root=data
+         self.mean = np.mean(data,axis=0)
+         self.cov=np.cov(np.transpose(data))
+-        self.rootnode=Node(data,self.cov,[],self.tree,num_splits=self.num_splits,min_infogain=self.min_infogain,max_depth=self.max_depth,pointer=0,rand=self.rand,splittype=self.splittype)
++        self.rootnode=Node(data,bbox,self.cov,[],self.tree,num_splits=self.num_splits,min_infogain=self.min_infogain,max_depth=self.max_depth,pointer=0,rand=self.rand,splittype=self.splittype)
+         self.tree[0]=self.rootnode
+ 
+     def predict(self,points):
+@@ -122,6 +116,9 @@ class RandomDensityTree:
+             new.append(self.rootnode.predict(p))
+         new=np.array(new)
+         return new
++
++    def sample(self):
++        return self.rootnode.sample()
+     
+     def max_prob():
+         '''returns maximum probability'''
+@@ -151,7 +148,7 @@ class RandomDensityTree:
+     
+ class Node:
+     
+-    def __init__(self,data,cov,history,tree,num_splits,min_infogain,max_depth,pointer,rand=True,splittype='axis'):
++    def __init__(self,data,bbox, cov,history,tree,num_splits,min_infogain,max_depth,pointer,rand=True,splittype='axis'):
+         '''
+         the init function automatically creates and trains the node
+         '''
+@@ -159,6 +156,7 @@ class Node:
+         self.min_infogain=min_infogain
+         self.pointer=pointer
+         self.size=data.shape[0]
++        self.bbox = bbox
+         self.tree=tree
+         self.num_splits=num_splits
+ 
+@@ -183,7 +181,7 @@ class Node:
+                 rnd_splits=[]
+                 if(rand==True):
+                     for dim in range(int(num_splits)):
+-                        direction=rnd.choice([0,1])
++                        direction=rnd.choice(range(data.shape[1]))
+ 
+                         rnd_split=rnd.uniform(min(data[:,direction]),max(data[:,direction]))
+ 
+@@ -197,11 +195,9 @@ class Node:
+             elif(self.splittype=='linear'):
+                 rnd_splits=[]
+                 for n in range(num_splits):
+-                    start=np.array([rnd.uniform(min(data[:,0]),max(data[:,0])),rnd.uniform(min(data[:,1]),max(data[:,1]))])
+-                    dir1=rnd.uniform(0,1)
+-                    direction=np.array([dir1,1-dir1])
+-                    direction[0]= direction[0]*rnd.choice([-1,1])
+-                    direction[1]= direction[1]*rnd.choice([-1,1])
++                    start=np.random.uniform(data.min(0), data.max(0))
++                    direction=np.random.dirichlet(np.ones((data.shape[1],)), 1).squeeze()
++                    direction *= np.random.choice([-1, 1], size=data.shape[1])
+                     rnd_splits.append({'split': start,'direction': direction})
+                     
+             #create lists of left data, right data sets and information gains
+@@ -212,19 +208,24 @@ class Node:
+             covs_left=[]
+             covs_right=[]
+ 
++            bboxs_left = []
++            bboxs_right = []
++
+             for s in range(num_splits):
+                 
+                 
+                 if (self.splittype=='linear'):
+-                    left_data,right_data=split_data_lin(data,rnd_splits[s]['split'],rnd_splits[s]['direction'])
++                    left_data,right_data,bbox_left,bbox_right=split_data_lin(data,self.bbox,rnd_splits[s]['split'],rnd_splits[s]['direction'])
+                 else:
+-                    left_data,right_data=split_data_axis(data,rnd_splits[s]['split'],rnd_splits[s]['direction'])
++                    left_data,right_data,bbox_left,bbox_right=split_data_axis(data,self.bbox,rnd_splits[s]['split'],rnd_splits[s]['direction'])
+               
+-                if(left_data.shape[0]>2 and right_data.shape[0]>2):
+-   
++                if(left_data.shape[0]>left_data.shape[1] and right_data.shape[0]>right_data.shape[1]):
+                     right_datas.append(right_data)
+                     left_datas.append(left_data)
+ 
++                    bboxs_left.append(bbox_left)
++                    bboxs_right.append(bbox_right)
++
+                     cov_l=np.cov(np.transpose(left_data))
+                     cov_r=np.cov(np.transpose(right_data))
+ 
+@@ -239,6 +240,8 @@ class Node:
+                     left_datas.append(float('nan'))
+                     covs_left.append(float('nan'))
+                     covs_right.append(float('nan'))
++                    bboxs_left.append(np.nan)
++                    bboxs_right.append(np.nan)
+                     #information gain if this split is used
+             if len(info_gains)==0:
+                 self.isLeaf=True
+@@ -259,12 +262,12 @@ class Node:
+                     self.history[len(self.history)-1]['child']='left'
+                     #the left child is generated and trained, the right child follows soon
+ 
+-                    leftnode=Node(left_datas[best],covs_left[best],self.history,tree,self.num_splits,self.min_infogain,self.maxdepth-1,2*pointer+1,rand=rand,splittype=self.splittype)
++                    leftnode=Node(left_datas[best],bboxs_left[best],covs_left[best],self.history,tree,self.num_splits,self.min_infogain,self.maxdepth-1,2*pointer+1,rand=rand,splittype=self.splittype)
+                     tree[2*pointer+1]=leftnode
+                     self.left_child=leftnode
+               
+                     self.history[len(self.history)-1]['child']='right'
+-                    rightnode=Node(right_datas[best],covs_right[best],self.history,tree,self.num_splits,self.min_infogain,self.maxdepth-1,2*pointer+2,rand=rand,splittype=self.splittype)
++                    rightnode=Node(right_datas[best],bboxs_right[best],covs_right[best],self.history,tree,self.num_splits,self.min_infogain,self.maxdepth-1,2*pointer+2,rand=rand,splittype=self.splittype)
+                     tree[2*pointer+2]=rightnode
+                     self.right_child=rightnode
+                     
+@@ -290,6 +293,12 @@ class Node:
+                  else:
+                     return self.right_child.predict(point)
+                 
++    def sample(self):
++        if not self.isLeaf:
++            child = np.random.uniform(0, 1) < self.left_child.size / (self.left_child.size + self.right_child.size)
++            return self.left_child.sample() if child else self.right_child.sample()
++        else:
++            return np.random.uniform(self.bbox[0], self.bbox[1])
+ 
+     def get_split_info(self,histories):
+         '''recursively returns split info (histories)'''
